@@ -32,13 +32,20 @@ ALLOWED_HOSTS = ['127.0.0.1', '.vercel.app']
 # Application definition
 
 INSTALLED_APPS = [
-    "whitenoise.runserver_nostatic",
+    # Django default apps
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    'drf_yasg',  # Make sure drf-yasg is listed
+    # Third-party apps
+    "rest_framework",  # Django REST Framework for APIs
+    "rest_framework.authtoken",  # Token-based authentication (optional)
+    "corsheaders",  # For handling Cross-Origin Resource Sharing (CORS)
+    # Apps
+    "common",  # Your custom app
 ]
 
 MIDDLEWARE = [
