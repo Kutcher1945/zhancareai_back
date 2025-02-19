@@ -10,11 +10,16 @@ from django.conf.urls.static import static
 # Define the Swagger schema view
 schema_view = get_schema_view(
     openapi.Info(
-        title="Samgau Back API",
+        title="ZhanCare.AI Backend API",
         default_version="v1",
-        description="API documentation for the Samgau Back project",
-        terms_of_service="https://www.google.com/policies/terms/",
-        contact=openapi.Contact(email="support@samgau.kz"),
+        description=(
+            "ZhanCare.AI provides a comprehensive API for telemedicine solutions, enabling remote medical consultations, "
+            "secure patient-doctor communication, AI-driven medical insights, and efficient healthcare management. "
+            "This API allows seamless integration with ZhanCare.AI's platform, facilitating access to video conferencing, "
+            "electronic medical records, notifications, and advanced AI-powered tools."
+        ),
+        terms_of_service="https://www.zhancare.ai/terms/",
+        contact=openapi.Contact(email="support@zhancare.ai"),
         license=openapi.License(name="BSD License"),
     ),
     public=True,
