@@ -26,7 +26,7 @@ SECRET_KEY = "django-insecure-emst*q@f==ek=8-o)me!_l1ek2vi*#_s9g46d6+86*nlbvstms
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['127.0.0.1', '.vercel.app']
+ALLOWED_HOSTS = ['127.0.0.1', 'localhost', '.vercel.app']
 
 
 # Application definition
@@ -39,7 +39,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    'drf_yasg',  # Make sure drf-yasg is listed
+    "drf_yasg",  # Make sure drf-yasg is listed
     # Third-party apps
     "rest_framework",  # Django REST Framework for APIs
     "rest_framework.authtoken",  # Token-based authentication (optional)
@@ -49,6 +49,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",  # Add this at the top
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -60,6 +61,42 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = "zhancareai_back.urls"
+
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'common.authentication.CustomTokenAuthentication',  # ✅ Use your CustomToken
+    ),
+    # 'DEFAULT_PERMISSION_CLASSES': (
+    #     'rest_framework.permissions.IsAuthenticated',
+    # ),
+}
+
+
+
+# Restrict Access-Control-Allow-Origin to a specific domain Production
+# CSRF_TRUSTED_ORIGINS = [
+#     'https://api.testfront.csti.kz',
+#     'https://testfront.csti.kz',
+#     'https://85.202.192.35',
+#     'https://api.csti.kz',
+#     'https://csti.kz',
+# ]
+
+# Для использования на локалхосте закоментить CORS_ALLOWED_ORIGINS и раскоментить CORS_ALLOW_ALL_ORIGINS и сделать = True
+# Ensure wildcard (*) is NOT used together with specific origins
+CORS_ALLOW_ALL_ORIGINS = True  # Set this to False if not already 
+
+CSRF_TRUSTED_ORIGINS = [
+    'https://api.testfront.csti.kz',
+    'https://testfront.csti.kz',
+    'https://85.202.192.35',
+    'http://85.202.192.35',
+    'http://127.0.0.1:5173',
+    'http://127.0.0.1:8000/',
+    'https://api.csti.kz',
+    'https://csti.kz',
+]
 
 TEMPLATES = [
     {

@@ -1,80 +1,56 @@
+import logging
 from drf_yasg import openapi
+from django.shortcuts import get_object_or_404
+from rest_framework.decorators import api_view
 from rest_framework.viewsets import ModelViewSet, ViewSet
 from rest_framework.response import Response
 from rest_framework.decorators import action
-from rest_framework.authtoken.models import Token  # Only if using token authentication
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
 from drf_yasg.utils import swagger_auto_schema
-from .models import User, Company, CustomToken
-from .serializers import UserSerializer, CompanySerializer, UserProfileSerializer
+from django.db.models import Q
+from django.contrib.auth import authenticate
 from django.contrib.auth.hashers import make_password, check_password
-from rest_framework.exceptions import ValidationError
+from .models import User, Company, CustomToken, Consultation
+from .serializers import UserSerializer, CompanySerializer, UserProfileSerializer, ConsultationSerializer
+from .permissions import IsDoctor, IsAdmin
+import uuid
+from django.utils import timezone
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 class UserViewSet(ModelViewSet):
-    queryset = User.objects.all()   
+    queryset = User.objects.all()
     serializer_class = UserSerializer
 
     @swagger_auto_schema(
-        operation_description="Custom action: User registration",
+        operation_description="Register a new user",
         request_body=UserSerializer,
-        responses={
-            201: "User registered successfully!",
-            400: "Validation error",
-        },
+        responses={201: "User registered successfully!", 400: "Validation error", 409: "User with the given email or phone already exists."},
     )
     @action(detail=False, methods=["post"], url_path="register")
     def register(self, request):
-        print(f"Request Data: {request.data}")  # Log the incoming request data
+        """Handles user registration with role support."""
         serializer = self.get_serializer(data=request.data)
 
         if serializer.is_valid():
-            email = serializer.validated_data.get("email")
-            phone = serializer.validated_data.get("phone")
-            print(f"Validated Email: {email}, Validated Phone: {phone}")  # Log validated email and phone
+            email = serializer.validated_data["email"]
+            phone = serializer.validated_data["phone"]
+            role = serializer.validated_data.get("role", "patient")  # ✅ Default to "patient"
 
-            # Check for duplicates
-            email_exists = User.objects.filter(email=email).exists()
-            phone_exists = User.objects.filter(phone=phone).exists()
-            print(f"Email Exists: {email_exists}, Phone Exists: {phone_exists}")  # Log the existence checks
+            if User.objects.filter(Q(email=email) | Q(phone=phone)).exists():
+                return Response({"error": "A user with this email or phone already exists."}, status=status.HTTP_409_CONFLICT)
 
-            if email_exists and phone_exists:
-                print("Error: Both email and phone already exist.")  # Log the error
-                return Response(
-                    {"error": "Комбинация такого email и телефона уже есть.", "code": "EMAIL_AND_PHONE_ALREADY_EXISTS"},
-                    status=status.HTTP_409_CONFLICT,
-                )
-            elif email_exists:
-                print("Error: Email already exists.")  # Log the error
-                return Response(
-                    {"error": "Пользователь с таким email уже существует.", "code": "EMAIL_ALREADY_EXISTS"},
-                    status=status.HTTP_409_CONFLICT,
-                )
-            elif phone_exists:
-                print("Error: Phone number already exists.")  # Log the error
-                return Response(
-                    {"error": "Пользователь с таким телефоном уже существует.", "code": "PHONE_NUMBER_ALREADY_EXISTS"},
-                    status=status.HTTP_409_CONFLICT,
-                )
-
-            # Save the user (no password hashing)
+            serializer.validated_data["password"] = make_password(serializer.validated_data["password"])
             user = serializer.save()
-            print(f"User Created: {user}")  # Log the created user
-            return Response(
-                {"message": "Регистрация прошла успешно!", "data": serializer.data},
-                status=status.HTTP_201_CREATED,
-            )
 
-        print(f"Validation Errors: {serializer.errors}")  # Log validation errors
-        return Response(
-            {"error": "Ошибка валидации данных.", "details": serializer.errors},
-            status=status.HTTP_422_UNPROCESSABLE_ENTITY
-        )
+            return Response({"message": "Registration successful!", "user": serializer.data}, status=status.HTTP_201_CREATED)
 
-
+        return Response({"error": "Validation error", "details": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
     @swagger_auto_schema(
-        operation_description="Custom action: User login",
+        operation_description="User login",
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
@@ -83,52 +59,76 @@ class UserViewSet(ModelViewSet):
             },
             required=["email", "password"],
         ),
-        responses={
-            200: "Login successful!",
-            401: "Invalid credentials",
-            403: "Account is inactive",
-        },
+        responses={200: "Login successful!", 401: "Invalid credentials", 403: "Account is inactive"},
     )
     @action(detail=False, methods=["post"], url_path="login")
     def login(self, request):
+        """Handles user login using email and password."""
+
         email = request.data.get("email", "").strip().lower()
         password = request.data.get("password")
-        print(f"Login attempt with email: {email}")
 
-        user = User.objects.filter(email=email).first()
-        print(f"User found: {user}")
+        print("🔹 Login attempt for email:", email)
 
-        # Check if user exists and password matches (no hashing)
-        if user and user.password == password:
-            print(f"Password matches: {user.password == password}")
-            if user.is_active:
-                print("User is active. Creating token...")
-                CustomToken.objects.filter(user=user).delete()
-                token = CustomToken.objects.create(user=user)
-                return Response(
-                    {
-                        "message": "Login successful!",
-                        "user": {
-                            "id": user.id,
-                            "email": user.email,
-                            "first_name": user.first_name,
-                            "last_name": user.last_name,
-                        },
-                        "token": token.key,
-                    },
-                    status=status.HTTP_200_OK,
-                )
-            print("User is inactive.")
-            return Response(
-                {"error": "Аккаунт не активен. Свяжитесь с поддержкой."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-        print("Invalid credentials.")
-        return Response({"error": "Неверные учетные данные."}, status=status.HTTP_401_UNAUTHORIZED)
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response({"error": "Invalid email or password."}, status=status.HTTP_401_UNAUTHORIZED)
 
+        if not user.check_password(password):
+            return Response({"error": "Invalid email or password."}, status=status.HTTP_401_UNAUTHORIZED)
 
+        if not user.is_active:
+            return Response({"error": "Account is inactive. Please contact support."}, status=status.HTTP_403_FORBIDDEN)
+
+        # ✅ Remove existing tokens and generate a new one
+        CustomToken.objects.filter(user=user).delete()
+        token = CustomToken.objects.create(user=user)
+
+        return Response(
+            {
+                "message": "Login successful!",
+                "user": {
+                    "id": user.id,
+                    "email": user.email,
+                    "first_name": user.first_name,
+                    "last_name": user.last_name,
+                    "role": user.role,
+                },
+                "token": token.key,  # ✅ Return correct token
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
+    @swagger_auto_schema(operation_description="Doctor Dashboard")
+    @action(detail=False, methods=["get"], permission_classes=[IsDoctor])
+    def doctor_dashboard(self, request):
+        return Response({"message": "Welcome, Doctor!"})
+
+    @swagger_auto_schema(operation_description="Admin Panel")
+    @action(detail=False, methods=["get"], permission_classes=[IsAdmin])
+    def admin_panel(self, request):
+        return Response({"message": "Welcome, Admin!"})
+
+    # ✅ New endpoint to fetch available doctors
+    @swagger_auto_schema(
+        operation_description="Get available doctors",
+        responses={200: "List of available doctors"},
+    )
+    @action(detail=False, methods=["get"], url_path="doctor/available")
+    def get_available_doctors(self, request):
+        """Fetch a list of available doctors."""
+        doctors = User.objects.filter(role="doctor", is_active=True)
+        
+        if not doctors.exists():
+            return Response({"error": "No available doctors found."}, status=status.HTTP_404_NOT_FOUND)
+
+        doctor_list = [
+            {"id": doctor.id, "name": f"{doctor.first_name} {doctor.last_name}", "email": doctor.email}
+            for doctor in doctors
+        ]
+        return Response({"doctors": doctor_list}, status=status.HTTP_200_OK)
 
 class UserProfileViewSet(ViewSet):
     """
@@ -233,3 +233,158 @@ class UserProfileViewSet(ViewSet):
 class CompanyViewSet(ModelViewSet):
     queryset = Company.objects.all()
     serializer_class = CompanySerializer
+
+
+
+class ConsultationViewSet(ModelViewSet):
+    queryset = Consultation.objects.all()
+    serializer_class = ConsultationSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+
+        print("🔍 DEBUG: User Object ->", user)  # ✅ Print the user object
+        print("🔍 DEBUG: User Authenticated? ->", user.is_authenticated)
+
+        if not user.is_authenticated:
+            return Consultation.objects.none()
+
+        print("🔍 DEBUG: User Role ->", getattr(user, "role", "No role found"))
+
+        if hasattr(user, "role") and user.role == "doctor":
+            return Consultation.objects.filter(doctor=user)
+
+        return Consultation.objects.filter(patient=user)
+
+    @action(detail=False, methods=["post"], url_path="start")
+    def start_consultation(self, request):
+        """
+        Patients start a video consultation with an available doctor.
+        """
+        user = request.user
+
+        if not user.is_authenticated or user.role != "patient":
+            return Response({"error": "Only patients can start consultations."}, status=status.HTTP_403_FORBIDDEN)
+
+        doctor_id = request.data.get("doctor_id")
+        doctor = User.objects.filter(id=doctor_id, role="doctor", is_active=True).first()
+
+        if not doctor:
+            return Response({"error": "Selected doctor is not available."}, status=status.HTTP_404_NOT_FOUND)
+
+        # ✅ Generate a unique meeting ID
+        meeting_id = str(uuid.uuid4())
+
+        # ✅ Create a new pending consultation
+        consultation = Consultation.objects.create(
+            patient=user,
+            doctor=doctor,
+            meeting_id=meeting_id,
+            status="pending",
+        )
+
+        # ✅ Notify doctor (Simulated: In production, use WebSockets or a messaging queue)
+        print(f"🔔 Doctor {doctor.email} received a consultation request from {user.email}")
+
+        return Response(
+            {
+                "message": "Consultation request sent!",
+                "doctor": {"id": doctor.id, "name": f"{doctor.first_name} {doctor.last_name}", "email": doctor.email},
+                "meeting_id": meeting_id,
+                "consultation_id": consultation.id,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["post"], url_path="accept")
+    def accept_consultation(self, request, pk=None):
+        """
+        Doctor accepts the consultation request.
+        """
+        user = request.user
+        consultation = self.get_object()
+
+        if user.role != "doctor" or consultation.doctor != user:
+            return Response({"error": "You are not authorized to accept this consultation."}, status=status.HTTP_403_FORBIDDEN)
+
+        consultation.status = "ongoing"
+        consultation.started_at = timezone.now()
+        consultation.save()
+
+        return Response(
+            {"message": "Consultation started!", "meeting_id": consultation.meeting_id, "status": consultation.status},
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["post"], url_path="reject")
+    def reject_consultation(self, request, pk=None):
+        """
+        Doctor rejects the consultation request.
+        """
+        user = request.user
+        consultation = self.get_object()
+
+        if user.role != "doctor" or consultation.doctor != user:
+            return Response({"error": "You are not authorized to reject this consultation."}, status=status.HTTP_403_FORBIDDEN)
+
+        consultation.status = "cancelled"
+        consultation.save()
+
+        return Response({"message": "Consultation rejected.", "status": consultation.status}, status=status.HTTP_200_OK)
+    
+    # ✅ Notify the patient when doctor accepts the call
+    @action(detail=True, methods=["post"], url_path="notify-patient")
+    def notify_patient(self, request, pk=None):
+        """
+        Notifies the patient that the doctor has accepted the call.
+        """
+        consultation = self.get_object()
+
+        # ✅ Ensure only doctors can notify patients
+        if request.user.role != "doctor":
+            return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
+
+        # ✅ Update consultation status to 'ongoing'
+        consultation.status = "ongoing"
+        consultation.save()
+
+        # ✅ Notify the patient (Frontend should poll for status changes)
+        return Response({"message": "Patient notified", "meeting_id": consultation.meeting_id}, status=status.HTTP_200_OK)
+
+    # ✅ API to check consultation status
+    @action(detail=False, methods=["get"], url_path="status")
+    def consultation_status(self, request):
+        """
+        Checks the status of a consultation based on meeting_id.
+        Used to notify the patient when the doctor has accepted the call.
+        """
+        meeting_id = request.query_params.get("meeting_id")
+        if not meeting_id:
+            return Response({"error": "Missing meeting_id"}, status=status.HTTP_400_BAD_REQUEST)
+
+        consultation = get_object_or_404(Consultation, meeting_id=meeting_id)
+
+        return Response({"status": consultation.status}, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"], url_path="start-call")
+    def start_call(self, request, pk=None):
+        """
+        Doctor starts the call.
+        """
+        consultation = self.get_object()
+        if consultation.status == "pending":
+            consultation.start()
+            return Response({"message": "Звонок начался!", "status": consultation.status})
+        return Response({"error": "Звонок уже начался"}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=["post"], url_path="end-call")
+    def end_call(self, request, pk=None):
+        """
+        Ends a consultation and saves the end timestamp.
+        """
+        consultation = self.get_object()
+        if consultation.status == "ongoing":
+            consultation.end()
+            return Response({"message": "Звонок завершён!", "status": consultation.status})
+        return Response({"error": "Консультация уже завершена"}, status=status.HTTP_400_BAD_REQUEST)
