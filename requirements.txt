@@ -26,3 +26,8 @@ python-decouple
 djangorestframework-simplejwt
 django-storages
 whitenoise
+channels
+daphne
+pyOpenSSL
+cryptography
+

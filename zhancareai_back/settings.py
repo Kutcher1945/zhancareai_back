@@ -38,9 +38,11 @@ INSTALLED_APPS = [
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.messages",
-    "django.contrib.staticfiles",
     "drf_yasg",  # Make sure drf-yasg is listed
     # Third-party apps
+    "daphne",  # ✅ ASGI server for Django
+    "channels",
+    "django.contrib.staticfiles",
     "rest_framework",  # Django REST Framework for APIs
     "rest_framework.authtoken",  # Token-based authentication (optional)
     "corsheaders",  # For handling Cross-Origin Resource Sharing (CORS)
@@ -114,8 +116,16 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = "zhancareai_back.wsgi.application"
+# WSGI_APPLICATION = "zhancareai_back.wsgi.application"
+ASGI_APPLICATION = "zhancareai_back.asgi.application"
 
+
+# ✅ (Optional) Use Redis for WebSockets (better for production)
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels.layers.InMemoryChannelLayer",
+    },
+}
 
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
