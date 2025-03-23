@@ -1,18 +1,18 @@
 from django.contrib.auth.hashers import make_password  # Ensure this import is present
 from rest_framework import serializers
-from .models import User, Company, Consultation
+from .models import User, Company
 
-class ConsultationSerializer(serializers.ModelSerializer):
-    patient_name = serializers.CharField(source="patient.first_name", read_only=True)
-    doctor_name = serializers.CharField(source="doctor.first_name", read_only=True)
+# class ConsultationSerializer(serializers.ModelSerializer):
+#     patient_name = serializers.CharField(source="patient.first_name", read_only=True)
+#     doctor_name = serializers.CharField(source="doctor.first_name", read_only=True)
 
-    class Meta:
-        model = Consultation
-        fields = [
-            "id", "patient", "doctor", "patient_name", "doctor_name", "meeting_id",
-            "status", "started_at", "ended_at", "created_at"
-        ]
-        read_only_fields = ["started_at", "ended_at", "created_at"]
+#     class Meta:
+#         model = Consultation
+#         fields = [
+#             "id", "patient", "doctor", "patient_name", "doctor_name", "meeting_id",
+#             "status", "started_at", "ended_at", "created_at"
+#         ]
+#         read_only_fields = ["started_at", "ended_at", "created_at"]
 
 class UserSerializer(serializers.ModelSerializer):
     role_display = serializers.SerializerMethodField()  # ✅ Returns role in Russian

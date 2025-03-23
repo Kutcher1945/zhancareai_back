@@ -48,6 +48,8 @@ INSTALLED_APPS = [
     "corsheaders",  # For handling Cross-Origin Resource Sharing (CORS)
     # Apps
     "common",  # Your custom app
+    "appointments",
+    "consultations",
 ]
 
 MIDDLEWARE = [
