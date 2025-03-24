@@ -30,7 +30,8 @@ schema_view = get_schema_view(
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/v1/", include("common.urls")),  # Include the common app's URLs
-    path("api/v1/", include("consultations.urls")),  # Include the common app's URLs
+    path("api/v1/", include("consultations.urls")),  # Include the consultations app's URLs
+    path("api/v1/", include("appointments.urls")),  # Include the appointments app's URLs
 
     # Swagger and ReDoc routes
     re_path(r"^swagger(?P<format>\.json|\.yaml)$", schema_view.without_ui(cache_timeout=0), name="schema-json"),
